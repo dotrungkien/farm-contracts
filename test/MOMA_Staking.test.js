@@ -54,9 +54,10 @@ describe('Test Farming', async () => {
       '2000000000000000000', // 2 MOMA / block
       startBlock,
       bonusEndBlock,
-      '2', // 2x for multipiler
+      '2', // 2x for multipiler,
+      ['50', '24', '7'],
       {
-        value: '0x2C68AF0BB140000'
+        value: '0x2C68AF0BB140000',
       }
     );
 
@@ -106,6 +107,10 @@ describe('Test Farming', async () => {
     await farm.connect(bob).withdraw('500000000000000000');
     console.log('Current block: ', parseInt(await time.latestBlock()));
     console.log('Bob reward balance: ', parseInt(await moma.balanceOf(bob.address)));
+    console.log(
+      'Vesting Contract reward balance: ',
+      parseInt(await moma.balanceOf(await farm.vesting()))
+    );
     console.log('Bob pending reward: ', parseInt(await farm.pendingReward(bob.address)));
     console.log('Jack pending reward: ', parseInt(await farm.pendingReward(jack.address)));
 
