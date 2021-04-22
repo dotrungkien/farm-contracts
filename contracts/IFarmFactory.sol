@@ -2,9 +2,9 @@
 pragma solidity ^0.8.0;
 
 interface IFarmFactory {
-  function userEnteredFarm(address _user) external;
+    function userEnteredFarm(address _user) external;
 
-  function userLeftFarm(address _user) external;
+    function userLeftFarm(address _user) external;
 
-  function registerFarm(address _farmAddress) external;
+    function registerFarm(address _farmAddress) external;
 }
