@@ -5,21 +5,21 @@
 
 pragma solidity ^0.8.0;
 
-import "./Farm.sol";
-import "./TransferHelper.sol";
-import "./IERCBurn.sol";
-import "./IFarmFactory.sol";
-import "./IUniFactory.sol";
-import "./IUniswapV2Pair.sol";
-
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+import "./Farm.sol";
+import "./TransferHelper.sol";
+import "./interfaces/IERCBurn.sol";
+import "./interfaces/IFarmFactory.sol";
+import "./interfaces/IUniFactory.sol";
+import "./interfaces/IUniswapV2Pair.sol";
 
 contract FarmGenerator is Ownable {
     IFarmFactory public factory;
     IUniFactory public uniswapFactory;
 
-    address payable devaddr;
+    address payable private _devaddr;
 
     struct FeeStruct {
         IERCBurn gasToken;
@@ -42,9 +42,9 @@ contract FarmGenerator is Ownable {
         uint256 amountFee;
     }
 
-    constructor(IFarmFactory _factory, IUniFactory _uniswapFactory) public {
+    constructor(IFarmFactory _factory, IUniFactory _uniswapFactory) {
         factory = _factory;
-        devaddr = payable(msg.sender);
+        _devaddr = payable(msg.sender);
         gFees.useGasToken = false;
         gFees.gasFee = 1 * (10**18);
         gFees.ethFee = 2e17;
@@ -75,8 +75,8 @@ contract FarmGenerator is Ownable {
         gFees.useGasToken = _useGasToken;
     }
 
-    function setDev(address payable _devaddr) public onlyOwner {
-        devaddr = _devaddr;
+    function setDev(address payable devaddr_) public onlyOwner {
+        _devaddr = devaddr_;
     }
 
     /**
@@ -173,7 +173,7 @@ contract FarmGenerator is Ownable {
         );
 
         require(msg.value == gFees.ethFee, "Fee not met");
-        devaddr.transfer(msg.value);
+        _devaddr.transfer(msg.value);
 
         if (gFees.useGasToken) {
             TransferHelper.safeTransferFrom(
@@ -205,7 +205,7 @@ contract FarmGenerator is Ownable {
             _vestingParameters
         );
 
-        TransferHelper.safeTransfer(address(_rewardToken), devaddr, params.amountFee);
+        TransferHelper.safeTransfer(address(_rewardToken), _devaddr, params.amountFee);
         factory.registerFarm(address(newFarm));
         return (address(newFarm));
     }

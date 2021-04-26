@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity ^0.8.0;
 
-import "./IFarmFactory.sol";
-import "./TransferHelper.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import "./interfaces/IFarmFactory.sol";
+import "./TransferHelper.sol";
 import "./Vesting.sol";
 
 contract Farm {
@@ -38,7 +39,7 @@ contract Farm {
 
     FarmInfo public farmInfo;
     Vesting public vesting;
-    uint256 percentForVesting; // 50 equivalent to 50%
+    uint256 public percentForVesting; // 50 equivalent to 50%
 
     /// @notice information on each user than stakes LP tokens
     mapping(address => UserInfo) public userInfo;
@@ -47,7 +48,7 @@ contract Farm {
     event Withdraw(address indexed user, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 amount);
 
-    constructor(address _factory, address _farmGenerator) public {
+    constructor(address _factory, address _farmGenerator) {
         factory = IFarmFactory(_factory);
         farmGenerator = _farmGenerator;
     }
@@ -97,13 +98,13 @@ contract Farm {
     }
 
     /**
-     * @notice Gets the reward multiplier over the given _from_block until _to block
-     * @param _from_block the start of the period to measure rewards for
+     * @notice Gets the reward multiplier over the given _fromBlock until _to block
+     * @param _fromBlock the start of the period to measure rewards for
      * @param _to the end of the period to measure rewards for
      * @return The weighted multiplier for the given period
      */
-    function getMultiplier(uint256 _from_block, uint256 _to) public view returns (uint256) {
-        uint256 _from = _from_block >= farmInfo.startBlock ? _from_block : farmInfo.startBlock;
+    function getMultiplier(uint256 _fromBlock, uint256 _to) public view returns (uint256) {
+        uint256 _from = _fromBlock >= farmInfo.startBlock ? _fromBlock : farmInfo.startBlock;
         uint256 to = farmInfo.endBlock > _to ? _to : farmInfo.endBlock;
         if (to <= farmInfo.bonusEndBlock) {
             return (to - _from) * farmInfo.bonus;
@@ -170,7 +171,7 @@ contract Farm {
                 vesting.addVesting(msg.sender, forVesting);
             }
 
-            safeRewardTransfer(msg.sender, pending - forVesting);
+            _safeRewardTransfer(msg.sender, pending - forVesting);
         }
         if (user.amount == 0 && _amount > 0) {
             factory.userEnteredFarm(msg.sender);
@@ -203,7 +204,7 @@ contract Farm {
             vesting.addVesting(msg.sender, forVesting);
         }
 
-        safeRewardTransfer(msg.sender, pending - forVesting);
+        _safeRewardTransfer(msg.sender, pending - forVesting);
 
         user.amount = user.amount - _amount;
         user.rewardDebt = (user.amount * farmInfo.accRewardPerShare) / 1e12;
@@ -231,7 +232,7 @@ contract Farm {
      * @param _to the user address to transfer tokens to
      * @param _amount the total amount of tokens to transfer
      */
-    function safeRewardTransfer(address _to, uint256 _amount) internal {
+    function _safeRewardTransfer(address _to, uint256 _amount) internal {
         uint256 rewardBal = farmInfo.rewardToken.balanceOf(address(this));
         if (_amount > rewardBal) {
             farmInfo.rewardToken.transfer(_to, rewardBal);
