@@ -23,7 +23,7 @@ contract FarmFactory is Ownable {
     /**
      * @notice called by a registered FarmGenerator upon Farm creation
      */
-    function registerFarm(address _farmAddress) public {
+    function addFarm(address _farmAddress) public {
         require(_farmGenerators.contains(msg.sender), "FORBIDDEN");
         _farms.add(_farmAddress);
     }
