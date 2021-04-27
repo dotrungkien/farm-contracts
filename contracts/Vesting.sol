@@ -40,13 +40,21 @@ contract Vesting is Ownable {
         _userToVestingList[_user].push(info);
     }
 
-    function claimVesting(uint256 _index) external {
+    function claimVesting(uint256 _index) public {
         require(_index < _userToVestingList[_msgSender()].length, "Vesting: Invalid index");
         uint256 claimableAmount = _getVestingClaimableAmount(_msgSender(), _index);
         require(claimableAmount > 0, "Vesting: Nothing to claim");
         _userToVestingList[_msgSender()][_index].claimedAmount =
             _userToVestingList[_msgSender()][_index].claimedAmount +
             claimableAmount;
+        require(token.transfer(msg.sender, claimableAmount), "Vesting: transfer failed");
+    }
+
+    function claimTotalVesting() external {
+        uint256 count = _userToVestingList[_msgSender()].length;
+        for (uint256 _index = 0; _index < count; _index++) {
+            claimVesting(_index);
+        }
     }
 
     function _getVestingClaimableAmount(address _user, uint256 _index)
@@ -68,6 +76,17 @@ contract Vesting is Ownable {
         claimableAmount = 0;
         if (releasedAmount > info.claimedAmount) {
             claimableAmount = releasedAmount - info.claimedAmount;
+        }
+    }
+
+    function getVestingTotalClaimableAmount(address _user)
+        external
+        view
+        returns (uint256 totalClaimableAmount)
+    {
+        uint256 count = _userToVestingList[_user].length;
+        for (uint256 _index = 0; _index < count; _index++) {
+            totalClaimableAmount = totalClaimableAmount + _getVestingClaimableAmount(_user, _index);
         }
     }
 
