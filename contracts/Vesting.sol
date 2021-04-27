@@ -11,33 +11,27 @@ import "./TransferHelper.sol";
 contract Vesting is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     IERC20 public token;
-    uint256 public totalRounds;
-    uint256 public daysPerRound;
+    uint256 public vestingDuration; // 1170000 blocks ~ 180 days
 
     struct VestingInfo {
         uint256 amount;
-        uint256 startTime;
+        uint256 startBlock;
         uint256 claimedAmount;
     }
 
     // user address => vestingInfo[]
     mapping(address => VestingInfo[]) private _userToVestingList;
 
-    constructor(
-        address _token,
-        uint256 _totalRounds,
-        uint256 _daysPerRound
-    ) {
+    constructor(address _token, uint256 _vestingDuration) {
         token = IERC20(_token);
-        require(_totalRounds > 0, "Vesting: Invalid total rounds");
-        require(_daysPerRound > 0, "Vesting: Invalid days per round");
-        totalRounds = _totalRounds;
-        daysPerRound = _daysPerRound;
+        require(_vestingDuration > 0, "Vesting: Invalid duration");
+
+        vestingDuration = _vestingDuration;
     }
 
     function addVesting(address _user, uint256 _amount) external onlyOwner {
         token.safeTransferFrom(_msgSender(), address(this), _amount);
-        VestingInfo memory info = VestingInfo(_amount, block.timestamp, 0);
+        VestingInfo memory info = VestingInfo(_amount, block.number, 0);
         _userToVestingList[_user].push(info);
     }
 
@@ -64,14 +58,14 @@ contract Vesting is Ownable, ReentrancyGuard {
         returns (uint256 claimableAmount)
     {
         VestingInfo memory info = _userToVestingList[_user][_index];
-        if (block.timestamp < info.startTime) return 0;
-        uint256 roundsPassed = ((block.timestamp - info.startTime) / 1 days) / daysPerRound;
+        if (block.number <= info.startBlock) return 0;
+        uint256 passedBlocks = block.number - info.startBlock;
 
         uint256 releasedAmount;
-        if (roundsPassed >= totalRounds) {
+        if (passedBlocks >= vestingDuration) {
             releasedAmount = info.amount;
         } else {
-            releasedAmount = (info.amount * roundsPassed) / totalRounds;
+            releasedAmount = (info.amount * passedBlocks) / vestingDuration;
         }
 
         claimableAmount = 0;
