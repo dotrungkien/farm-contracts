@@ -20,13 +20,14 @@ contract Farm {
     IERC20 public lpToken;
     IERC20 public rewardToken;
     uint256 public startBlock;
-    uint256 public blockReward;
-    uint256 public bonusEndBlock;
-    uint256 public bonusRate;
-    uint256 public endBlock;
+    uint256 public rewardPerBlock;
     uint256 public lastRewardBlock;
     uint256 public accRewardPerShare;
     uint256 public farmerCount;
+
+    uint256 public initRate;
+    uint256 public reducingRate; // 95 equivalent to 95%
+    uint256 public reducingCycle; // 195000 equivalent 195000 block
 
     IFarmFactory public factory;
     address public farmGenerator;
@@ -53,30 +54,33 @@ contract Farm {
         IERC20 _rewardToken,
         uint256 _amount,
         IERC20 _lpToken,
-        uint256 _blockReward,
+        uint256 _rewardPerBlock,
         uint256 _startBlock,
-        uint256 _endBlock,
-        uint256 _bonusEndBlock,
-        uint256 _bonusRate,
+        uint256[] memory _rateParameters, // 0: initRate, 1: reducingRate, 2: reducingCycle
         uint256[] memory _vestingParameters // 0: percentForVesting, 1: totalRounds, 2: daysPerRound
     ) public {
         require(msg.sender == address(farmGenerator), "Farm: FORBIDDEN");
+        require(address(_rewardToken) != address(0), "Farm: Invalid reward token");
+        require(_rewardPerBlock > 1000, "Farm: Invalid block reward"); // minimum 1000 divisibility per block reward
+        require(_startBlock > block.number, "Farm: Invalid start block"); // ideally at least 24 hours more to give farmers time
         require(_vestingParameters[0] <= 100, "Farm: Invalid percent for vesting");
+        require(_rateParameters[0] > 0, "Farm: Invalid initial rate");
+        require(_rateParameters[1] > 0 && _rateParameters[1] < 100, "Farm: Invalid reducing rate");
+        require(_rateParameters[2] > 0, "Farm: Invalid reducing cycle");
 
         TransferHelper.safeTransferFrom(address(_rewardToken), msg.sender, address(this), _amount);
 
         rewardToken = _rewardToken;
         startBlock = _startBlock;
-        blockReward = _blockReward;
-        bonusEndBlock = _bonusEndBlock;
-        bonusRate = _bonusRate;
+        rewardPerBlock = _rewardPerBlock;
+        initRate = _rateParameters[0];
+        reducingRate = _rateParameters[1];
+        reducingCycle = _rateParameters[2];
 
         uint256 _lastRewardBlock = block.number > _startBlock ? block.number : _startBlock;
         lpToken = _lpToken;
         lastRewardBlock = _lastRewardBlock;
         accRewardPerShare = 0;
-
-        endBlock = _endBlock;
 
         if (_vestingParameters[0] > 0) {
             percentForVesting = _vestingParameters[0];
@@ -96,15 +100,29 @@ contract Farm {
      * @return The weighted multiplier for the given period
      */
     function getMultiplier(uint256 _fromBlock, uint256 _toBlock) public view returns (uint256) {
-        uint256 _from = _fromBlock >= startBlock ? _fromBlock : startBlock;
-        uint256 _to = endBlock > _toBlock ? _toBlock : endBlock;
-        if (_to <= bonusEndBlock) {
-            return (_to - _from) * bonusRate;
-        } else if (_from >= bonusEndBlock) {
-            return _to - _from;
-        } else {
-            return ((bonusEndBlock - _from) * bonusRate) + (_to - bonusEndBlock);
+        return _getMultiplierFromStart(_toBlock) - _getMultiplierFromStart(_fromBlock);
+    }
+
+    function _getMultiplierFromStart(uint256 _block) internal view returns (uint256) {
+        uint256 roundPassed = (_block - startBlock) / reducingCycle;
+        uint256 multiplier = 0;
+        uint256 i = 0;
+
+        for (i = 0; i < roundPassed; i++) {
+            multiplier =
+                multiplier +
+                ((1e12 * initRate * reducingRate**i) / 100**i) *
+                reducingCycle;
         }
+
+        if ((_block - startBlock) % reducingCycle > 0) {
+            multiplier =
+                multiplier +
+                ((1e12 * initRate * reducingRate**(i + 1)) / 100**(i + 1)) *
+                ((_block - startBlock) % reducingCycle);
+        }
+
+        return multiplier;
     }
 
     /**
@@ -118,7 +136,7 @@ contract Farm {
         uint256 _lpSupply = lpToken.balanceOf(address(this));
         if (block.number > lastRewardBlock && _lpSupply != 0) {
             uint256 _multiplier = getMultiplier(lastRewardBlock, block.number);
-            uint256 _tokenReward = _multiplier * blockReward;
+            uint256 _tokenReward = (_multiplier * rewardPerBlock) / 1e12;
             _accRewardPerShare = _accRewardPerShare + ((_tokenReward * 1e12) / _lpSupply);
         }
         return ((user.amount * _accRewardPerShare) / 1e12) - user.rewardDebt;
@@ -133,13 +151,13 @@ contract Farm {
         }
         uint256 _lpSupply = lpToken.balanceOf(address(this));
         if (_lpSupply == 0) {
-            lastRewardBlock = block.number < endBlock ? block.number : endBlock;
+            lastRewardBlock = block.number;
             return;
         }
         uint256 _multiplier = getMultiplier(lastRewardBlock, block.number);
-        uint256 _tokenReward = _multiplier * blockReward;
+        uint256 _tokenReward = (_multiplier * rewardPerBlock) / 1e12;
         accRewardPerShare = accRewardPerShare + ((_tokenReward * 1e12) / _lpSupply);
-        lastRewardBlock = block.number < endBlock ? block.number : endBlock;
+        lastRewardBlock = block.number;
     }
 
     /**
@@ -234,10 +252,7 @@ contract Farm {
         uint256 amount
     ) external {
         require(msg.sender == Ownable(farmGenerator).owner(), "Farm: FORBIDDEN");
-        require(
-            address(lpToken) != tokenToRescue && address(rewardToken) != tokenToRescue,
-            "Farm: Cannot claim token held by the contract"
-        );
+        require(address(lpToken) != tokenToRescue, "Farm: Cannot claim token held by the contract");
 
         IERC20(tokenToRescue).safeTransfer(to, amount);
     }
