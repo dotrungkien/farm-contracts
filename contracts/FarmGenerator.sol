@@ -39,11 +39,11 @@ contract FarmGenerator is Ownable {
         IERC20 _lpToken,
         uint256 _rewardPerBlock,
         uint256 _startBlock,
-        uint256[] memory _rateParameters,
+        uint256[] memory _rateParameters, // 0: firstCycleRate 1: initRate, 2: reducingRate, 3: reducingCycle
         uint256[] memory _vestingParameters // 0: percentForVesting, 1: totalRounds, 2: daysPerRound
     ) public onlyOwner returns (address) {
-        require(_rateParameters.length == 3, "Farm Generator: Invalid vesting parameters");
-        require(_vestingParameters.length == 3, "Farm Generator: Invalid vesting parameters");
+        require(_rateParameters.length == 4, "Farm Generator: Invalid vesting parameters");
+        require(_vestingParameters.length == 2, "Farm Generator: Invalid vesting parameters");
         IUniswapV2Pair lpair = IUniswapV2Pair(address(_lpToken));
         address factoryPairAddress = uniswapFactory.getPair(lpair.token0(), lpair.token1());
         require(factoryPairAddress == address(_lpToken), "This pair is not on uniswap");
