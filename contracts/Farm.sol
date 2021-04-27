@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "./interfaces/IFarmFactory.sol";
 import "./TransferHelper.sol";
@@ -16,28 +17,20 @@ contract Farm {
         uint256 rewardDebt; // Reward debt.
     }
 
-    /// @notice all the settings for this farm in one struct
-    struct FarmInfo {
-        IERC20 lpToken;
-        IERC20 rewardToken;
-        uint256 startBlock;
-        uint256 blockReward;
-        uint256 bonusEndBlock;
-        uint256 bonus;
-        uint256 endBlock;
-        uint256 lastRewardBlock; // Last block number that reward distribution occurs.
-        uint256 accRewardPerShare; // Accumulated Rewards per share, times 1e12
-        uint256 farmableSupply; // set in init, total amount of tokens farmable
-        uint256 numFarmers;
-    }
-
-    /// @notice farm type id. Useful for back-end systems to know how to read the contract (ABI) as we plan to launch multiple farm types
-    uint256 public farmType = 1;
+    IERC20 public lpToken;
+    IERC20 public rewardToken;
+    uint256 public startBlock;
+    uint256 public blockReward;
+    uint256 public bonusEndBlock;
+    uint256 public bonusRate;
+    uint256 public endBlock;
+    uint256 public lastRewardBlock;
+    uint256 public accRewardPerShare;
+    uint256 public farmerCount;
 
     IFarmFactory public factory;
     address public farmGenerator;
 
-    FarmInfo public farmInfo;
     Vesting public vesting;
     uint256 public percentForVesting; // 50 equivalent to 50%
 
@@ -64,29 +57,28 @@ contract Farm {
         uint256 _startBlock,
         uint256 _endBlock,
         uint256 _bonusEndBlock,
-        uint256 _bonus,
+        uint256 _bonusRate,
         uint256[] memory _vestingParameters // 0: percentForVesting, 1: totalRounds, 2: daysPerRound
     ) public {
         require(msg.sender == address(farmGenerator), "Farm: FORBIDDEN");
+        require(_vestingParameters[0] <= 100, "Farm: Invalid percent for vesting");
 
         TransferHelper.safeTransferFrom(address(_rewardToken), msg.sender, address(this), _amount);
-        farmInfo.rewardToken = _rewardToken;
 
-        farmInfo.startBlock = _startBlock;
-        farmInfo.blockReward = _blockReward;
-        farmInfo.bonusEndBlock = _bonusEndBlock;
-        farmInfo.bonus = _bonus;
+        rewardToken = _rewardToken;
+        startBlock = _startBlock;
+        blockReward = _blockReward;
+        bonusEndBlock = _bonusEndBlock;
+        bonusRate = _bonusRate;
 
-        uint256 lastRewardBlock = block.number > _startBlock ? block.number : _startBlock;
-        farmInfo.lpToken = _lpToken;
-        farmInfo.lastRewardBlock = lastRewardBlock;
-        farmInfo.accRewardPerShare = 0;
+        uint256 _lastRewardBlock = block.number > _startBlock ? block.number : _startBlock;
+        lpToken = _lpToken;
+        lastRewardBlock = _lastRewardBlock;
+        accRewardPerShare = 0;
 
-        farmInfo.endBlock = _endBlock;
-        farmInfo.farmableSupply = _amount;
+        endBlock = _endBlock;
 
         if (_vestingParameters[0] > 0) {
-            require(_vestingParameters[0] < 100, "Farm: Invalid percent for vesting");
             percentForVesting = _vestingParameters[0];
             vesting = new Vesting(
                 address(_rewardToken),
@@ -100,19 +92,18 @@ contract Farm {
     /**
      * @notice Gets the reward multiplier over the given _fromBlock until _to block
      * @param _fromBlock the start of the period to measure rewards for
-     * @param _to the end of the period to measure rewards for
+     * @param _toBlock the end of the period to measure rewards for
      * @return The weighted multiplier for the given period
      */
-    function getMultiplier(uint256 _fromBlock, uint256 _to) public view returns (uint256) {
-        uint256 _from = _fromBlock >= farmInfo.startBlock ? _fromBlock : farmInfo.startBlock;
-        uint256 to = farmInfo.endBlock > _to ? _to : farmInfo.endBlock;
-        if (to <= farmInfo.bonusEndBlock) {
-            return (to - _from) * farmInfo.bonus;
-        } else if (_from >= farmInfo.bonusEndBlock) {
-            return to - _from;
+    function getMultiplier(uint256 _fromBlock, uint256 _toBlock) public view returns (uint256) {
+        uint256 _from = _fromBlock >= startBlock ? _fromBlock : startBlock;
+        uint256 _to = endBlock > _toBlock ? _toBlock : endBlock;
+        if (_to <= bonusEndBlock) {
+            return (_to - _from) * bonusRate;
+        } else if (_from >= bonusEndBlock) {
+            return _to - _from;
         } else {
-            return
-                ((farmInfo.bonusEndBlock - _from) * farmInfo.bonus) + (to - farmInfo.bonusEndBlock);
+            return ((bonusEndBlock - _from) * bonusRate) + (_to - bonusEndBlock);
         }
     }
 
@@ -123,36 +114,32 @@ contract Farm {
      */
     function pendingReward(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[_user];
-        uint256 accRewardPerShare = farmInfo.accRewardPerShare;
-        uint256 lpSupply = farmInfo.lpToken.balanceOf(address(this));
-        if (block.number > farmInfo.lastRewardBlock && lpSupply != 0) {
-            uint256 multiplier = getMultiplier(farmInfo.lastRewardBlock, block.number);
-            uint256 tokenReward = multiplier * farmInfo.blockReward;
-            accRewardPerShare = accRewardPerShare + ((tokenReward * 1e12) / lpSupply);
+        uint256 _accRewardPerShare = accRewardPerShare;
+        uint256 _lpSupply = lpToken.balanceOf(address(this));
+        if (block.number > lastRewardBlock && _lpSupply != 0) {
+            uint256 _multiplier = getMultiplier(lastRewardBlock, block.number);
+            uint256 _tokenReward = _multiplier * blockReward;
+            _accRewardPerShare = _accRewardPerShare + ((_tokenReward * 1e12) / _lpSupply);
         }
-        return ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
+        return ((user.amount * _accRewardPerShare) / 1e12) - user.rewardDebt;
     }
 
     /**
      * @notice updates pool information to be up to date to the current block
      */
     function updatePool() public {
-        if (block.number <= farmInfo.lastRewardBlock) {
+        if (block.number <= lastRewardBlock) {
             return;
         }
-        uint256 lpSupply = farmInfo.lpToken.balanceOf(address(this));
-        if (lpSupply == 0) {
-            farmInfo.lastRewardBlock = block.number < farmInfo.endBlock
-                ? block.number
-                : farmInfo.endBlock;
+        uint256 _lpSupply = lpToken.balanceOf(address(this));
+        if (_lpSupply == 0) {
+            lastRewardBlock = block.number < endBlock ? block.number : endBlock;
             return;
         }
-        uint256 multiplier = getMultiplier(farmInfo.lastRewardBlock, block.number);
-        uint256 tokenReward = multiplier * farmInfo.blockReward;
-        farmInfo.accRewardPerShare = farmInfo.accRewardPerShare + ((tokenReward * 1e12) / lpSupply);
-        farmInfo.lastRewardBlock = block.number < farmInfo.endBlock
-            ? block.number
-            : farmInfo.endBlock;
+        uint256 _multiplier = getMultiplier(lastRewardBlock, block.number);
+        uint256 _tokenReward = _multiplier * blockReward;
+        accRewardPerShare = accRewardPerShare + ((_tokenReward * 1e12) / _lpSupply);
+        lastRewardBlock = block.number < endBlock ? block.number : endBlock;
     }
 
     /**
@@ -163,23 +150,23 @@ contract Farm {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
         if (user.amount > 0) {
-            uint256 pending = ((user.amount * farmInfo.accRewardPerShare) / 1e12) - user.rewardDebt;
+            uint256 _pending = ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
 
-            uint256 forVesting = 0;
+            uint256 _forVesting = 0;
             if (percentForVesting > 0) {
-                forVesting = (pending * percentForVesting) / 100;
-                vesting.addVesting(msg.sender, forVesting);
+                _forVesting = (_pending * percentForVesting) / 100;
+                vesting.addVesting(msg.sender, _forVesting);
             }
 
-            _safeRewardTransfer(msg.sender, pending - forVesting);
+            _safeRewardTransfer(msg.sender, _pending - _forVesting);
         }
         if (user.amount == 0 && _amount > 0) {
             factory.userEnteredFarm(msg.sender);
-            farmInfo.numFarmers++;
+            farmerCount++;
         }
-        farmInfo.lpToken.safeTransferFrom(address(msg.sender), address(this), _amount);
+        lpToken.safeTransferFrom(msg.sender, address(this), _amount);
         user.amount = user.amount + _amount;
-        user.rewardDebt = (user.amount * farmInfo.accRewardPerShare) / 1e12;
+        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
         emit Deposit(msg.sender, _amount);
     }
 
@@ -193,22 +180,22 @@ contract Farm {
         updatePool();
         if (user.amount == _amount && _amount > 0) {
             factory.userLeftFarm(msg.sender);
-            farmInfo.numFarmers--;
+            farmerCount--;
         }
 
-        uint256 pending = ((user.amount * farmInfo.accRewardPerShare) / 1e12) - user.rewardDebt;
+        uint256 _pending = ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
 
-        uint256 forVesting = 0;
+        uint256 _forVesting = 0;
         if (percentForVesting > 0) {
-            forVesting = (pending * percentForVesting) / 100;
-            vesting.addVesting(msg.sender, forVesting);
+            _forVesting = (_pending * percentForVesting) / 100;
+            vesting.addVesting(msg.sender, _forVesting);
         }
 
-        _safeRewardTransfer(msg.sender, pending - forVesting);
+        _safeRewardTransfer(msg.sender, _pending - _forVesting);
 
         user.amount = user.amount - _amount;
-        user.rewardDebt = (user.amount * farmInfo.accRewardPerShare) / 1e12;
-        farmInfo.lpToken.safeTransfer(address(msg.sender), _amount);
+        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+        lpToken.safeTransfer(msg.sender, _amount);
         emit Withdraw(msg.sender, _amount);
     }
 
@@ -217,11 +204,11 @@ contract Farm {
      */
     function emergencyWithdraw() public {
         UserInfo storage user = userInfo[msg.sender];
-        farmInfo.lpToken.safeTransfer(address(msg.sender), user.amount);
+        lpToken.safeTransfer(msg.sender, user.amount);
         emit EmergencyWithdraw(msg.sender, user.amount);
         if (user.amount > 0) {
             factory.userLeftFarm(msg.sender);
-            farmInfo.numFarmers--;
+            farmerCount--;
         }
         user.amount = 0;
         user.rewardDebt = 0;
@@ -233,11 +220,25 @@ contract Farm {
      * @param _amount the total amount of tokens to transfer
      */
     function _safeRewardTransfer(address _to, uint256 _amount) internal {
-        uint256 rewardBal = farmInfo.rewardToken.balanceOf(address(this));
-        if (_amount > rewardBal) {
-            farmInfo.rewardToken.transfer(_to, rewardBal);
+        uint256 _rewardBal = rewardToken.balanceOf(address(this));
+        if (_amount > _rewardBal) {
+            rewardToken.transfer(_to, _rewardBal);
         } else {
-            farmInfo.rewardToken.transfer(_to, _amount);
+            rewardToken.transfer(_to, _amount);
         }
+    }
+
+    function rescueFunds(
+        address tokenToRescue,
+        address to,
+        uint256 amount
+    ) external {
+        require(msg.sender == Ownable(farmGenerator).owner(), "Farm: FORBIDDEN");
+        require(
+            address(lpToken) != tokenToRescue && address(rewardToken) != tokenToRescue,
+            "Farm: Cannot claim token held by the contract"
+        );
+
+        IERC20(tokenToRescue).safeTransfer(to, amount);
     }
 }

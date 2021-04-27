@@ -6,5 +6,5 @@ interface IFarmFactory {
 
     function userLeftFarm(address _user) external;
 
-    function registerFarm(address _farmAddress) external;
+    function addFarm(address _farmAddress) external;
 }

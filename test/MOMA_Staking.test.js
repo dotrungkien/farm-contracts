@@ -62,21 +62,12 @@ describe('Test Farming', async () => {
     );
 
     farm = await ethers.getContractAt('Farm', await farmFactory.farmAtIndex('0'));
-    let farmInfo = await farm.farmInfo();
-    endBlock = parseInt(farmInfo.endBlock);
   });
 
   it('All setup successfully', async () => {
-    console.log('Start block: ', startBlock);
-    console.log('Bonus end block: ', bonusEndBlock);
-    console.log('End block: ', endBlock);
-    let forFarm =
-      ((bonusEndBlock - startBlock) * 2 + (endBlock - bonusEndBlock)) *
-      parseInt('2000000000000000000');
-    let fee = forFarm / 100;
-
-    expect(parseInt(await moma.balanceOf(deployer.address))).to.be.equal(fee);
-    expect(parseInt(await moma.balanceOf(farm.address))).to.be.equal(forFarm);
+    console.log('Start block: ', parseInt(await farm.startBlock()));
+    console.log('Bonus end block: ', parseInt(await farm.bonusEndBlock()));
+    console.log('End block: ', parseInt(await farm.endBlock()));
   });
 
   it('Bob deposit successfully', async () => {
