@@ -12,7 +12,7 @@ async function main() {
 
   let rewardPerBlock = '3000000000000000000';
 
-  let startBlock = (await ethers.provider.getBlockNumber()) + 200;
+  let startBlock = (await ethers.provider.getBlockNumber()) + 20;
   console.log('Startblock: ', startBlock);
   let firstCycleRate = 2;
   let initRate = 1;
@@ -64,7 +64,6 @@ async function main() {
 
   console.log('\nCreate Farm...');
 
-  console.log(farmGenerator.address);
   tx = await momaToken.connect(deployer).approve(farmGenerator.address, amount);
   await tx.wait();
   tx = await farmGenerator
@@ -89,6 +88,7 @@ async function main() {
   console.log('Farm Factory: ', farmFactory.address);
   console.log('Farm Generator: ', farmGenerator.address);
   console.log('Farm: ', farm.address);
+  console.log('Vesting: ', await farm.vesting());
 }
 
 main()

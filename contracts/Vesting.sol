@@ -32,21 +32,27 @@ contract Vesting is Ownable, ReentrancyGuard {
         _userToVestingList[_user].push(info);
     }
 
-    function claimVesting(uint256 _index) public nonReentrant {
+    function claimVesting(uint256 _index) external nonReentrant {
+        _claimVestingInternal(_index);
+    }
+
+    function claimTotalVesting() external nonReentrant {
+        uint256 count = _userToVestingList[_msgSender()].length;
+        for (uint256 _index = 0; _index < count; _index++) {
+            if (_getVestingClaimableAmount(_msgSender(), _index) > 0) {
+                _claimVestingInternal(_index);
+            }
+        }
+    }
+
+    function _claimVestingInternal(uint256 _index) private {
         require(_index < _userToVestingList[_msgSender()].length, "Vesting: Invalid index");
         uint256 claimableAmount = _getVestingClaimableAmount(_msgSender(), _index);
         require(claimableAmount > 0, "Vesting: Nothing to claim");
         _userToVestingList[_msgSender()][_index].claimedAmount =
             _userToVestingList[_msgSender()][_index].claimedAmount +
             claimableAmount;
-        require(token.transfer(msg.sender, claimableAmount), "Vesting: transfer failed");
-    }
-
-    function claimTotalVesting() external nonReentrant {
-        uint256 count = _userToVestingList[_msgSender()].length;
-        for (uint256 _index = 0; _index < count; _index++) {
-            claimVesting(_index);
-        }
+        require(token.transfer(_msgSender(), claimableAmount), "Vesting: transfer failed");
     }
 
     function _getVestingClaimableAmount(address _user, uint256 _index)
@@ -103,5 +109,18 @@ contract Vesting is Ownable, ReentrancyGuard {
         require(_index < _userToVestingList[_user].length, "Vesting: Invalid index");
         VestingInfo memory info = _userToVestingList[_user][_index];
         return info;
+    }
+
+    function getTotalAmountLockedByUser(address _user) external view returns (uint256) {
+        uint256 count = _userToVestingList[_user].length;
+        uint256 amountLocked = 0;
+        for (uint256 _index = 0; _index < count; _index++) {
+            amountLocked =
+                amountLocked +
+                _userToVestingList[_user][_index].amount -
+                _userToVestingList[_user][_index].claimedAmount;
+        }
+
+        return amountLocked;
     }
 }
