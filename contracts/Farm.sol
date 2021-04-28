@@ -24,7 +24,9 @@ contract Farm {
     uint256 public lastRewardBlock;
     uint256 public accRewardPerShare;
     uint256 public farmerCount;
+    bool public isActive;
 
+    uint256 public firstCycleRate;
     uint256 public initRate;
     uint256 public reducingRate; // 95 equivalent to 95%
     uint256 public reducingCycle; // 195000 equivalent 195000 block
@@ -42,6 +44,16 @@ contract Farm {
     event Withdraw(address indexed user, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 amount);
 
+    modifier onlyFarmGeneratorOwner() {
+        require(msg.sender == Ownable(farmGenerator).owner(), "Farm: FORBIDDEN");
+        _;
+    }
+
+    modifier mustActive() {
+        require(isActive == true, "Farm: Not active");
+        _;
+    }
+
     constructor(address _factory, address _farmGenerator) {
         factory = IFarmFactory(_factory);
         farmGenerator = _farmGenerator;
@@ -56,26 +68,29 @@ contract Farm {
         IERC20 _lpToken,
         uint256 _rewardPerBlock,
         uint256 _startBlock,
-        uint256[] memory _rateParameters, // 0: initRate, 1: reducingRate, 2: reducingCycle
-        uint256[] memory _vestingParameters // 0: percentForVesting, 1: totalRounds, 2: daysPerRound
+        uint256[] memory _rateParameters, // 0: firstCycleRate , 1: initRate, 2: reducingRate, 3: reducingCycle
+        uint256[] memory _vestingParameters // 0: percentForVesting, 1: vestingDuration
     ) public {
         require(msg.sender == address(farmGenerator), "Farm: FORBIDDEN");
         require(address(_rewardToken) != address(0), "Farm: Invalid reward token");
         require(_rewardPerBlock > 1000, "Farm: Invalid block reward"); // minimum 1000 divisibility per block reward
         require(_startBlock > block.number, "Farm: Invalid start block"); // ideally at least 24 hours more to give farmers time
         require(_vestingParameters[0] <= 100, "Farm: Invalid percent for vesting");
-        require(_rateParameters[0] > 0, "Farm: Invalid initial rate");
-        require(_rateParameters[1] > 0 && _rateParameters[1] < 100, "Farm: Invalid reducing rate");
-        require(_rateParameters[2] > 0, "Farm: Invalid reducing cycle");
+        require(_rateParameters[0] > 0, "Farm: Invalid first cycle rate");
+        require(_rateParameters[1] > 0, "Farm: Invalid initial rate");
+        require(_rateParameters[2] > 0 && _rateParameters[1] < 100, "Farm: Invalid reducing rate");
+        require(_rateParameters[3] > 0, "Farm: Invalid reducing cycle");
 
         TransferHelper.safeTransferFrom(address(_rewardToken), msg.sender, address(this), _amount);
 
         rewardToken = _rewardToken;
         startBlock = _startBlock;
         rewardPerBlock = _rewardPerBlock;
-        initRate = _rateParameters[0];
-        reducingRate = _rateParameters[1];
-        reducingCycle = _rateParameters[2];
+        firstCycleRate = _rateParameters[0];
+        initRate = _rateParameters[1];
+        reducingRate = _rateParameters[2];
+        reducingCycle = _rateParameters[3];
+        isActive = true;
 
         uint256 _lastRewardBlock = block.number > _startBlock ? block.number : _startBlock;
         lpToken = _lpToken;
@@ -84,11 +99,7 @@ contract Farm {
 
         if (_vestingParameters[0] > 0) {
             percentForVesting = _vestingParameters[0];
-            vesting = new Vesting(
-                address(_rewardToken),
-                _vestingParameters[1],
-                _vestingParameters[2]
-            );
+            vesting = new Vesting(address(_rewardToken), _vestingParameters[1]);
             _rewardToken.safeApprove(address(vesting), type(uint256).max);
         }
     }
@@ -105,24 +116,28 @@ contract Farm {
 
     function _getMultiplierFromStart(uint256 _block) internal view returns (uint256) {
         uint256 roundPassed = (_block - startBlock) / reducingCycle;
-        uint256 multiplier = 0;
-        uint256 i = 0;
 
-        for (i = 0; i < roundPassed; i++) {
-            multiplier =
-                multiplier +
-                ((1e12 * initRate * reducingRate**i) / 100**i) *
-                reducingCycle;
+        if (roundPassed == 0) {
+            return (_block - startBlock) * firstCycleRate * 1e12;
+        } else {
+            uint256 multiplier = reducingCycle * firstCycleRate * 1e12;
+            uint256 i = 0;
+            for (i = 0; i < roundPassed - 1; i++) {
+                multiplier =
+                    multiplier +
+                    ((1e12 * initRate * reducingRate**i) / 100**i) *
+                    reducingCycle;
+            }
+
+            if ((_block - startBlock) % reducingCycle > 0) {
+                multiplier =
+                    multiplier +
+                    ((1e12 * initRate * reducingRate**i) / 100**i) *
+                    ((_block - startBlock) % reducingCycle);
+            }
+
+            return multiplier;
         }
-
-        if ((_block - startBlock) % reducingCycle > 0) {
-            multiplier =
-                multiplier +
-                ((1e12 * initRate * reducingRate**(i + 1)) / 100**(i + 1)) *
-                ((_block - startBlock) % reducingCycle);
-        }
-
-        return multiplier;
     }
 
     /**
@@ -130,7 +145,7 @@ contract Farm {
      * @param _user the user for whom unclaimed tokens will be shown
      * @return total amount of withdrawable reward tokens
      */
-    function pendingReward(address _user) external view returns (uint256) {
+    function pendingReward(address _user) public view returns (uint256) {
         UserInfo storage user = userInfo[_user];
         uint256 _accRewardPerShare = accRewardPerShare;
         uint256 _lpSupply = lpToken.balanceOf(address(this));
@@ -145,7 +160,7 @@ contract Farm {
     /**
      * @notice updates pool information to be up to date to the current block
      */
-    function updatePool() public {
+    function updatePool() public mustActive {
         if (block.number <= lastRewardBlock) {
             return;
         }
@@ -164,12 +179,11 @@ contract Farm {
      * @notice deposit LP token function for msg.sender
      * @param _amount the total deposit amount
      */
-    function deposit(uint256 _amount) public {
+    function deposit(uint256 _amount) public mustActive {
         UserInfo storage user = userInfo[msg.sender];
         updatePool();
         if (user.amount > 0) {
             uint256 _pending = ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
-
             uint256 _forVesting = 0;
             if (percentForVesting > 0) {
                 _forVesting = (_pending * percentForVesting) / 100;
@@ -195,14 +209,17 @@ contract Farm {
     function withdraw(uint256 _amount) public {
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "INSUFFICIENT");
-        updatePool();
+
+        if (isActive == true) {
+            updatePool();
+        }
+
         if (user.amount == _amount && _amount > 0) {
             factory.userLeftFarm(msg.sender);
             farmerCount--;
         }
 
         uint256 _pending = ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
-
         uint256 _forVesting = 0;
         if (percentForVesting > 0) {
             _forVesting = (_pending * percentForVesting) / 100;
@@ -250,10 +267,18 @@ contract Farm {
         address tokenToRescue,
         address to,
         uint256 amount
-    ) external {
-        require(msg.sender == Ownable(farmGenerator).owner(), "Farm: FORBIDDEN");
+    ) external onlyFarmGeneratorOwner {
         require(address(lpToken) != tokenToRescue, "Farm: Cannot claim token held by the contract");
 
         IERC20(tokenToRescue).safeTransfer(to, amount);
+    }
+
+    function updateReducingRate(uint256 _reducingRate) external onlyFarmGeneratorOwner mustActive {
+        reducingRate = _reducingRate;
+    }
+
+    function forceEnd() external onlyFarmGeneratorOwner mustActive {
+        updatePool();
+        isActive = false;
     }
 }

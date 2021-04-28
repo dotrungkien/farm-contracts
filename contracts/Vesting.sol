@@ -5,9 +5,6 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "./interfaces/IFarmFactory.sol";
-import "./TransferHelper.sol";
-
 contract Vesting is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     IERC20 public token;
