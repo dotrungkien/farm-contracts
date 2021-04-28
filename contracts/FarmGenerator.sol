@@ -11,16 +11,16 @@ import "./Farm.sol";
 import "./TransferHelper.sol";
 import "./interfaces/IERCBurn.sol";
 import "./interfaces/IFarmFactory.sol";
-import "./interfaces/IUniFactory.sol";
+import "./interfaces/IUniswapV2Factory.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 
 contract FarmGenerator is Ownable {
     IFarmFactory public factory;
-    IUniFactory public uniswapFactory;
+    IUniswapV2Factory public uniswapFactory;
 
     address payable private _devaddr;
 
-    constructor(IFarmFactory _factory, IUniFactory _uniswapFactory) {
+    constructor(IFarmFactory _factory, IUniswapV2Factory _uniswapFactory) {
         factory = _factory;
         _devaddr = payable(msg.sender);
         uniswapFactory = _uniswapFactory;
@@ -40,7 +40,7 @@ contract FarmGenerator is Ownable {
         uint256 _rewardPerBlock,
         uint256 _startBlock,
         uint256[] memory _rateParameters, // 0: firstCycleRate 1: initRate, 2: reducingRate, 3: reducingCycle
-        uint256[] memory _vestingParameters // 0: percentForVesting, 1: totalRounds, 2: daysPerRound
+        uint256[] memory _vestingParameters // 0: percentForVesting, 1: vestingDuration
     ) public onlyOwner returns (address) {
         require(_rateParameters.length == 4, "Farm Generator: Invalid vesting parameters");
         require(_vestingParameters.length == 2, "Farm Generator: Invalid vesting parameters");
@@ -48,25 +48,24 @@ contract FarmGenerator is Ownable {
         address factoryPairAddress = uniswapFactory.getPair(lpair.token0(), lpair.token1());
         require(factoryPairAddress == address(_lpToken), "This pair is not on uniswap");
 
+        Farm newFarm = new Farm(address(factory), address(this));
+
         TransferHelper.safeTransferFrom(
             address(_rewardToken),
             address(msg.sender),
-            address(this),
+            address(newFarm),
             _amount
         );
 
-        Farm newFarm = new Farm(address(factory), address(this));
-        TransferHelper.safeApprove(address(_rewardToken), address(newFarm), _amount);
-
         newFarm.init(
             _rewardToken,
-            _amount,
             _lpToken,
             _rewardPerBlock,
             _startBlock,
             _rateParameters,
             _vestingParameters
         );
+
         factory.addFarm(address(newFarm));
         return (address(newFarm));
     }
