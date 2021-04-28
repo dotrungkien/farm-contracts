@@ -143,25 +143,25 @@ describe('Test Farming', async () => {
     );
   });
 
-  it('Bob and Jack deposit successfully first before startBlock comes', async () => {
-    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
-    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+  // it('Bob and Jack deposit successfully first before startBlock comes', async () => {
+  //   await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+  //   await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
 
-    await uniPair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
-    await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
+  //   await uniPair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
+  //   await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
 
-    await farm.connect(bob).deposit(bobLPBeforeBalance);
-    await farm.connect(jack).deposit(jackLPBeforeBalance);
+  //   await farm.connect(bob).deposit(bobLPBeforeBalance);
+  //   await farm.connect(jack).deposit(jackLPBeforeBalance);
 
-    await time.advanceBlockTo(startBlock + 1);
-    expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
-      (firstCycleRate * parseInt(rewardPerBlock)) / 2
-    );
-    await time.advanceBlockTo(startBlock + 2);
-    expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
-      (2 * firstCycleRate * parseInt(rewardPerBlock)) / 2
-    );
-  });
+  //   await time.advanceBlockTo(startBlock + 1);
+  //   expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
+  //     (firstCycleRate * parseInt(rewardPerBlock)) / 2
+  //   );
+  //   await time.advanceBlockTo(startBlock + 2);
+  //   expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
+  //     (2 * firstCycleRate * parseInt(rewardPerBlock)) / 2
+  //   );
+  // });
 
   it('Bob and Jack deposit successfully first before startBlock comes', async () => {
     await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);

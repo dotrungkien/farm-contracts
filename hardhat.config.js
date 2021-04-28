@@ -31,12 +31,13 @@ module.exports = {
       accounts: [process.env.DEPLOYER_PRIVATE_KEY],
       gasLimit: 30000000,
     },
-    onetestnet: {
-      url: `https://api.s0.b.hmny.io`,
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY],
-    },
     ropsten: {
       url: `https://ropsten.infura.io/v3/${process.env.INFURA_KEY}`,
+      accounts: [process.env.DEPLOYER_PRIVATE_KEY],
+      gasLimit: '6721975',
+    },
+    rinkeby: {
+      url: `https://rinkeby.infura.io/v3/${process.env.INFURA_KEY}`,
       accounts: [process.env.DEPLOYER_PRIVATE_KEY],
       gasLimit: '6721975',
     },

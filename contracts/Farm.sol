@@ -64,7 +64,6 @@ contract Farm {
      */
     function init(
         IERC20 _rewardToken,
-        uint256 _amount,
         IERC20 _lpToken,
         uint256 _rewardPerBlock,
         uint256 _startBlock,
@@ -80,8 +79,6 @@ contract Farm {
         require(_rateParameters[1] > 0, "Farm: Invalid initial rate");
         require(_rateParameters[2] > 0 && _rateParameters[1] < 100, "Farm: Invalid reducing rate");
         require(_rateParameters[3] > 0, "Farm: Invalid reducing cycle");
-
-        TransferHelper.safeTransferFrom(address(_rewardToken), msg.sender, address(this), _amount);
 
         rewardToken = _rewardToken;
         startBlock = _startBlock;
