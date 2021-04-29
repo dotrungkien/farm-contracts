@@ -1,9 +1,9 @@
 const { ethers } = require('hardhat');
 const { expect } = require('chai');
-const { time } = require('@openzeppelin/test-helpers');
+const { time, expectRevert } = require('@openzeppelin/test-helpers');
 
 describe('Test Farming', async () => {
-  let farmFactory, farmGenerator, farm, uniPair, uniFactory, moma, weth;
+  let farmFactory, farmGenerator, farm, uniPair, uniFactory, moma, weth, vesting;
   let deployer, alice, bob, jack;
   let startBlock;
 
@@ -69,23 +69,24 @@ describe('Test Farming', async () => {
     );
 
     farm = await ethers.getContractAt('Farm', await farmFactory.farmAtIndex('0'));
+    vesting = await ethers.getContractAt('Vesting', await farm.vesting());
   });
 
-  it('All setup successfully', async () => {
-    console.log('LP token: ', await farm.lpToken());
-    console.log('Reward token: ', await farm.rewardToken());
-    console.log('Start block: ', parseInt(await farm.startBlock()));
-    console.log('Reward per block: ', parseInt(await farm.rewardPerBlock()));
-    console.log('Last reward block: ', parseInt(await farm.lastRewardBlock()));
-    console.log('Accurate reward per share: ', parseInt(await farm.accRewardPerShare()));
-    console.log('Farmer count: ', parseInt(await farm.farmerCount()));
-    console.log('Initial rate: ', parseInt(await farm.initRate()));
-    console.log('Reducing rate: ', parseInt(await farm.reducingRate()));
-    console.log('Reducing cycle: ', parseInt(await farm.reducingCycle()));
-    console.log('Farm factory: ', await farm.factory());
-    console.log('Farm generator: ', await farm.farmGenerator());
-    console.log('Vesting : ', await farm.vesting());
-    console.log('Percent for vesting : ', parseInt(await farm.percentForVesting()));
+  it.only('All setup successfully', async () => {
+    expect(await farm.lpToken()).to.be.equal(uniPair.address);
+    expect(await farm.rewardToken()).to.be.equal(moma.address);
+    expect(parseInt(await farm.startBlock())).to.be.equal(startBlock);
+    expect(parseInt(await farm.rewardPerBlock())).to.be.equal(parseInt(rewardPerBlock));
+    expect(parseInt(await farm.lastRewardBlock())).to.be.equal(startBlock);
+    expect(parseInt(await farm.accRewardPerShare())).to.be.equal(0);
+    expect(parseInt(await farm.farmerCount())).to.be.equal(0);
+    expect(parseInt(await farm.firstCycleRate())).to.be.equal(firstCycleRate);
+    expect(parseInt(await farm.initRate())).to.be.equal(initRate);
+    expect(parseInt(await farm.reducingRate())).to.be.equal(reducingRate);
+    expect(parseInt(await farm.reducingCycle())).to.be.equal(reducingCycle);
+    expect(await farm.factory()).to.be.equal(farmFactory.address);
+    expect(await farm.farmGenerator()).to.be.equal(farmGenerator.address);
+    expect(parseInt(await farm.percentForVesting())).to.be.equal(percentForVesting);
   });
 
   it('Check multiplier', async () => {
