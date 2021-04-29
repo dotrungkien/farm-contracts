@@ -39,6 +39,7 @@ contract FarmGenerator is Ownable {
         IERC20 _lpToken,
         uint256 _rewardPerBlock,
         uint256 _startBlock,
+        address _owner,
         uint256[] memory _rateParameters, // 0: firstCycleRate 1: initRate, 2: reducingRate, 3: reducingCycle
         uint256[] memory _vestingParameters // 0: percentForVesting, 1: vestingDuration
     ) public onlyOwner returns (address) {
@@ -50,7 +51,7 @@ contract FarmGenerator is Ownable {
 
         Farm newFarm = new Farm(address(factory), address(this));
 
-        _rewardToken.safeTransferFrom(address(msg.sender), address(newFarm), _amount);
+        _rewardToken.safeTransferFrom(_msgSender(), address(newFarm), _amount);
 
         newFarm.init(
             _rewardToken,
@@ -58,7 +59,8 @@ contract FarmGenerator is Ownable {
             _rewardPerBlock,
             _startBlock,
             _rateParameters,
-            _vestingParameters
+            _vestingParameters,
+            _owner
         );
 
         factory.addFarm(address(newFarm));

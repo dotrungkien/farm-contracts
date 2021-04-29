@@ -16,6 +16,8 @@ contract Farm {
         uint256 rewardDebt; // Reward debt.
     }
 
+    address public owner;
+
     IERC20 public lpToken;
     IERC20 public rewardToken;
     uint256 public startBlock;
@@ -43,8 +45,8 @@ contract Farm {
     event Withdraw(address indexed user, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 amount);
 
-    modifier onlyFarmGeneratorOwner() {
-        require(msg.sender == Ownable(farmGenerator).owner(), "Farm: FORBIDDEN");
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Farm: FORBIDDEN");
         _;
     }
 
@@ -67,7 +69,8 @@ contract Farm {
         uint256 _rewardPerBlock,
         uint256 _startBlock,
         uint256[] memory _rateParameters, // 0: firstCycleRate , 1: initRate, 2: reducingRate, 3: reducingCycle
-        uint256[] memory _vestingParameters // 0: percentForVesting, 1: vestingDuration
+        uint256[] memory _vestingParameters, // 0: percentForVesting, 1: vestingDuration
+        address _owner
     ) public {
         require(msg.sender == address(farmGenerator), "Farm: FORBIDDEN");
         require(address(_rewardToken) != address(0), "Farm: Invalid reward token");
@@ -87,6 +90,7 @@ contract Farm {
         reducingRate = _rateParameters[2];
         reducingCycle = _rateParameters[3];
         isActive = true;
+        owner = _owner;
 
         uint256 _lastRewardBlock = block.number > _startBlock ? block.number : _startBlock;
         lpToken = _lpToken;
@@ -180,13 +184,19 @@ contract Farm {
         updatePool();
         if (user.amount > 0) {
             uint256 _pending = ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
+
+            uint256 availableRewardToken = rewardToken.balanceOf(address(this));
+            if (_pending > availableRewardToken) {
+                _pending = availableRewardToken;
+            }
+
             uint256 _forVesting = 0;
             if (percentForVesting > 0) {
                 _forVesting = (_pending * percentForVesting) / 100;
                 vesting.addVesting(msg.sender, _forVesting);
             }
 
-            _safeRewardTransfer(msg.sender, _pending - _forVesting);
+            rewardToken.safeTransfer(msg.sender, _pending - _forVesting);
         }
         if (user.amount == 0 && _amount > 0) {
             factory.userEnteredFarm(msg.sender);
@@ -216,13 +226,19 @@ contract Farm {
         }
 
         uint256 _pending = ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
+
+        uint256 availableRewardToken = rewardToken.balanceOf(address(this));
+        if (_pending > availableRewardToken) {
+            _pending = availableRewardToken;
+        }
+
         uint256 _forVesting = 0;
         if (percentForVesting > 0) {
             _forVesting = (_pending * percentForVesting) / 100;
             vesting.addVesting(msg.sender, _forVesting);
         }
 
-        _safeRewardTransfer(msg.sender, _pending - _forVesting);
+        rewardToken.safeTransfer(msg.sender, _pending - _forVesting);
 
         user.amount = user.amount - _amount;
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
@@ -251,30 +267,38 @@ contract Farm {
      * @param _amount the total amount of tokens to transfer
      */
     function _safeRewardTransfer(address _to, uint256 _amount) internal {
-        uint256 _rewardBal = rewardToken.balanceOf(address(this));
-        if (_amount > _rewardBal) {
-            rewardToken.transfer(_to, _rewardBal);
-        } else {
-            rewardToken.transfer(_to, _amount);
-        }
+        rewardToken.transfer(_to, _amount);
     }
 
     function rescueFunds(
         address tokenToRescue,
         address to,
         uint256 amount
-    ) external onlyFarmGeneratorOwner {
+    ) external onlyOwner {
         require(address(lpToken) != tokenToRescue, "Farm: Cannot claim token held by the contract");
 
         IERC20(tokenToRescue).safeTransfer(to, amount);
     }
 
-    function updateReducingRate(uint256 _reducingRate) external onlyFarmGeneratorOwner mustActive {
+    function updateReducingRate(uint256 _reducingRate) external onlyOwner mustActive {
+        require(_reducingRate > 0 && _reducingRate <= 100, "Farm: Invalid reducing rate");
         reducingRate = _reducingRate;
     }
 
-    function forceEnd() external onlyFarmGeneratorOwner mustActive {
+    function updatePercentForVesting(uint256 _percentForVesting) external onlyOwner {
+        require(
+            _percentForVesting >= 0 && _percentForVesting <= 100,
+            "Farm: Invalid percent for vesting"
+        );
+        percentForVesting = _percentForVesting;
+    }
+
+    function forceEnd() external onlyOwner mustActive {
         updatePool();
         isActive = false;
+    }
+
+    function transferOwnership(address _owner) external onlyOwner {
+        owner = _owner;
     }
 }

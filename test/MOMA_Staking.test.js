@@ -19,9 +19,8 @@ describe('Test Farming', async () => {
   let reducingRate = 95;
   let reducingCycle = 195000;
 
-  let percentForVesting = 50;
-  let vestingDuration = 195000;
-
+  let percentForVesting = 100;
+  let vestingDuration = 1170000;
   beforeEach(async () => {
     [deployer, alice, bob, jack] = await ethers.getSigners();
 
@@ -64,6 +63,7 @@ describe('Test Farming', async () => {
       uniPair.address,
       rewardPerBlock, // 2 MOMA / block
       startBlock,
+      deployer.address,
       [firstCycleRate, initRate, reducingRate, reducingCycle],
       [percentForVesting, vestingDuration]
     );
@@ -72,7 +72,7 @@ describe('Test Farming', async () => {
     vesting = await ethers.getContractAt('Vesting', await farm.vesting());
   });
 
-  it.only('All setup successfully', async () => {
+  it('All setup successfully', async () => {
     expect(await farm.lpToken()).to.be.equal(uniPair.address);
     expect(await farm.rewardToken()).to.be.equal(moma.address);
     expect(parseInt(await farm.startBlock())).to.be.equal(startBlock);
@@ -89,80 +89,92 @@ describe('Test Farming', async () => {
     expect(parseInt(await farm.percentForVesting())).to.be.equal(percentForVesting);
   });
 
-  it('Check multiplier', async () => {
-    expect(parseInt(await farm.getMultiplier(startBlock, startBlock))).to.be.equal(0);
+  describe('Check multiplier', async () => {
+    it('Check multiplier from startBlock to startBlock', async () => {
+      expect(parseInt(await farm.getMultiplier(startBlock, startBlock))).to.be.equal(0);
+    });
 
-    expect(parseInt(await farm.getMultiplier(startBlock, startBlock + 1))).to.be.equal(
-      firstCycleRate * 1e12
-    );
-    expect(parseInt(await farm.getMultiplier(startBlock, startBlock + 194999))).to.be.equal(
-      firstCycleRate * 1e12 * 194999
-    );
-    expect(parseInt(await farm.getMultiplier(startBlock, startBlock + 195000))).to.be.equal(
-      firstCycleRate * 1e12 * 195000
-    );
+    it('Check multiplier from startBlock to startBlock + 1', async () => {
+      expect(parseInt(await farm.getMultiplier(startBlock, startBlock + 1))).to.be.equal(
+        firstCycleRate * 1e12 * 1
+      );
+    });
 
-    expect(parseInt(await farm.getMultiplier(startBlock, startBlock + 195100))).to.be.equal(
-      firstCycleRate * 1e12 * 195000 + 100 * initRate * 1e12
-    );
+    it('Check multiplier from startBlock to startBlock + reducingCycle - 1', async () => {
+      expect(
+        parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle - 1))
+      ).to.be.equal(firstCycleRate * 1e12 * (reducingCycle - 1));
+    });
 
-    expect(parseInt(await farm.getMultiplier(startBlock, startBlock + 390000))).to.be.equal(
-      firstCycleRate * 1e12 * 195000 + 195000 * initRate * 1e12
-    );
+    it('Check multiplier from startBlock to startBlock + reducingCycle', async () => {
+      expect(
+        parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle))
+      ).to.be.equal(firstCycleRate * 1e12 * reducingCycle);
+    });
 
-    expect(parseInt(await farm.getMultiplier(startBlock, startBlock + 391000))).to.be.equal(
-      firstCycleRate * 1e12 * 195000 +
-        195000 * initRate * 1e12 +
-        (1000 * 1e12 * initRate * reducingRate) / 100
-    );
+    it('Check multiplier from startBlock to startBlock + reducingCycle + 100', async () => {
+      expect(
+        parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle + 100))
+      ).to.be.equal(firstCycleRate * 1e12 * reducingCycle + 100 * initRate * 1e12);
+    });
 
-    expect(
-      parseInt(await farm.getMultiplier(startBlock + 195001, startBlock + 391000))
-    ).to.be.equal(
-      initRate * 1e12 * (390000 - 195001) + (1000 * 1e12 * initRate * reducingRate) / 100
-    );
+    it('Check multiplier from startBlock to startBlock + reducingCycle * 2', async () => {
+      expect(
+        parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle * 2))
+      ).to.be.equal(firstCycleRate * 1e12 * reducingCycle + initRate * 1e12 * reducingCycle);
+    });
 
-    expect(
-      parseInt(await farm.getMultiplier(startBlock + 195001, startBlock + 391000))
-    ).to.be.equal(
-      parseInt(await farm.getMultiplier(startBlock, startBlock + 391000)) -
-        parseInt(await farm.getMultiplier(startBlock, startBlock + 195001))
-    );
+    it('Check multiplier from startBlock to startBlock + reducingCycle * 2 + 1000', async () => {
+      expect(
+        parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle * 2 + 1000))
+      ).to.be.equal(
+        firstCycleRate * 1e12 * reducingCycle +
+          initRate * 1e12 * reducingCycle +
+          ((1e12 * initRate * reducingRate) / 100) * 1000
+      );
+    });
+
+    it('Check multiplier from startBlock + reducingCycle + 1 to startBlock + reducingCycle * 2 + 1000', async () => {
+      expect(
+        parseInt(
+          await farm.getMultiplier(
+            startBlock + reducingCycle + 1,
+            startBlock + reducingCycle * 2 + 1000
+          )
+        )
+      ).to.be.equal(
+        parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle * 2 + 1000)) -
+          parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle + 1))
+      );
+    });
   });
 
   it('Bob deposit successfully first and only bob in pool', async () => {
     await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
     await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
     await farm.connect(bob).deposit(bobLPBeforeBalance);
-    await time.advanceBlockTo(startBlock + 1);
+    await time.advanceBlockTo(startBlock + 10);
+
     expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
-      firstCycleRate * parseInt(rewardPerBlock)
-    );
-    await time.advanceBlockTo(startBlock + 2);
-    expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
-      2 * firstCycleRate * parseInt(rewardPerBlock)
+      10 * firstCycleRate * parseInt(rewardPerBlock)
     );
   });
 
-  // it('Bob and Jack deposit successfully first before startBlock comes', async () => {
-  //   await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
-  //   await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+  it('Bob and Jack deposit successfully before startBlock comes', async () => {
+    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
 
-  //   await uniPair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
-  //   await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
+    await uniPair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
+    await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
 
-  //   await farm.connect(bob).deposit(bobLPBeforeBalance);
-  //   await farm.connect(jack).deposit(jackLPBeforeBalance);
+    await farm.connect(bob).deposit(bobLPBeforeBalance);
+    await farm.connect(jack).deposit(jackLPBeforeBalance);
 
-  //   await time.advanceBlockTo(startBlock + 1);
-  //   expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
-  //     (firstCycleRate * parseInt(rewardPerBlock)) / 2
-  //   );
-  //   await time.advanceBlockTo(startBlock + 2);
-  //   expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
-  //     (2 * firstCycleRate * parseInt(rewardPerBlock)) / 2
-  //   );
-  // });
+    await time.advanceBlockTo(startBlock + 10);
+    expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
+      parseInt(await farm.pendingReward(jack.address))
+    );
+  });
 
   it('Bob and Jack deposit successfully first before startBlock comes', async () => {
     await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
@@ -178,13 +190,13 @@ describe('Test Farming', async () => {
     expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
       (firstCycleRate * parseInt(rewardPerBlock)) / 2
     );
-    await time.advanceBlockTo(startBlock + 100);
+    await time.advanceBlockTo(startBlock + 10);
     expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
-      (100 * firstCycleRate * parseInt(rewardPerBlock)) / 2
+      (10 * firstCycleRate * parseInt(rewardPerBlock)) / 2
     );
   });
 
-  it('Bob deposit successfully after that Jack deposit successfully', async () => {
+  it('Bob deposit successfully before startBlock comes, Jack deposit successfully at startBlock + 10', async () => {
     await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
     await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
 
@@ -192,34 +204,141 @@ describe('Test Farming', async () => {
     await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
-    await time.advanceBlockTo(startBlock + 101);
+    await time.advanceBlockTo(startBlock + 10);
+
+    expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(
+      rewardPerBlock * firstCycleRate * 10
+    );
 
     await farm.connect(jack).deposit(jackLPBeforeBalance);
-    await time.advanceBlockTo(startBlock + 200);
+    await time.advanceBlockTo(startBlock + 20);
 
     let bobReward = parseInt(await farm.pendingReward(bob.address));
     let jackReward = parseInt(await farm.pendingReward(jack.address));
 
-    expect(bobReward / jackReward).to.be.gt(2);
+    expect(bobReward / jackReward).to.be.gt(
+      (parseInt(bobLPBeforeBalance) * 20) / (parseInt(jackLPBeforeBalance) * 10)
+    );
   });
 
   it('Bob deposits first time successfully, second time', async () => {
-    await uniPair.connect(deployer).mint(bob.address, '2000000000000000000');
-    await uniPair.connect(bob).approve(farm.address, '2000000000000000000');
+    await uniPair
+      .connect(deployer)
+      .mint(bob.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+    await uniPair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
-    await time.advanceBlockTo(startBlock + 200);
+    await time.advanceBlockTo(startBlock + 10);
 
     let bobPendingReward = parseInt(await farm.pendingReward(bob.address));
-    console.log(bobPendingReward);
+    expect(bobPendingReward).to.be.equal(10 * firstCycleRate * parseInt(rewardPerBlock));
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
 
-    let vestingContract = await ethers.getContractAt('Vesting', await farm.vesting());
-    let vestingInfo = await vestingContract.getVestingInfo(bob.address, '0');
-
-    expect(parseInt(amountToFarm)).to.be.equal(
-      parseInt(vestingInfo.amount) + parseInt(await moma.balanceOf(bob.address))
+    expect(parseInt(await farm.pendingReward(bob.address))).to.be.equal(0);
+    expect(parseInt(await moma.balanceOf(vesting.address))).to.be.equal(
+      ((bobPendingReward + 1 * firstCycleRate * parseInt(rewardPerBlock)) * percentForVesting) / 100
     );
+  });
+
+  it('Bob deposits successfully, when he deposit seconde time, moma in Farm less than his pendingReward', async () => {
+    await uniPair
+      .connect(deployer)
+      .mint(bob.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+    await uniPair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+
+    await farm.connect(bob).deposit(bobLPBeforeBalance);
+    await time.advanceBlockTo(startBlock + 10);
+
+    let bobPendingReward = parseInt(await farm.pendingReward(bob.address));
+
+    await farm
+      .connect(deployer)
+      .rescueFunds(moma.address, deployer.address, '1890000000000000000000');
+
+    let farmRewardBalance = parseInt(await moma.balanceOf(farm.address));
+
+    expect(farmRewardBalance).to.be.lt(bobPendingReward);
+
+    await farm.connect(bob).deposit(0);
+    expect(parseInt(await moma.balanceOf(vesting.address))).to.be.equal(
+      (farmRewardBalance * percentForVesting) / 100
+    );
+
+    expect(parseInt(await vesting.getTotalAmountLockedByUser(bob.address))).to.be.equal(
+      farmRewardBalance
+    );
+  });
+
+  it('Bob deposits successfully, when he withdraw, moma in Farm less than his pendingReward', async () => {
+    await uniPair
+      .connect(deployer)
+      .mint(bob.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+    await uniPair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+
+    await farm.connect(bob).deposit(bobLPBeforeBalance);
+    await time.advanceBlockTo(startBlock + 10);
+
+    let bobPendingReward = parseInt(await farm.pendingReward(bob.address));
+
+    await farm
+      .connect(deployer)
+      .rescueFunds(moma.address, deployer.address, '1890000000000000000000');
+
+    let farmRewardBalance = parseInt(await moma.balanceOf(farm.address));
+
+    expect(farmRewardBalance).to.be.lt(bobPendingReward);
+
+    await farm.connect(bob).deposit(0);
+    expect(parseInt(await moma.balanceOf(vesting.address))).to.be.equal(
+      (farmRewardBalance * percentForVesting) / 100
+    );
+
+    expect(parseInt(await vesting.getTotalAmountLockedByUser(bob.address))).to.be.equal(
+      farmRewardBalance
+    );
+  });
+
+  it('Only farm owner can call updateReducingRate updatePercentForVesting forceEnd transferOwnership', async () => {
+    await expectRevert(farm.connect(bob).updateReducingRate(90), 'Farm: FORBIDDEN');
+    await expectRevert(farm.connect(bob).updatePercentForVesting(90), 'Farm: FORBIDDEN');
+    await expectRevert(farm.connect(bob).forceEnd(), 'Farm: FORBIDDEN');
+    await expectRevert(farm.connect(bob).transferOwnership(bob.address), 'Farm: FORBIDDEN');
+  });
+
+  it('Update reducing rate successfully', async () => {
+    let oldMultiplier = parseInt(
+      await farm.getMultiplier(startBlock, startBlock + reducingCycle * 2 + 1000)
+    );
+
+    let newReducingRate = 90;
+    await farm.connect(deployer).updateReducingRate(90);
+    let newMultiplier = parseInt(
+      await farm.getMultiplier(startBlock, startBlock + reducingCycle * 2 + 1000)
+    );
+
+    expect(newMultiplier).to.be.equal(
+      firstCycleRate * 1e12 * reducingCycle +
+        initRate * 1e12 * reducingCycle +
+        ((1e12 * initRate * newReducingRate) / 100) * 1000
+    );
+
+    expect(newMultiplier).to.be.lt(oldMultiplier);
+  });
+
+  it('Force end successfully', async () => {
+    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+
+    await farm.connect(bob).deposit(bobLPBeforeBalance);
+    await time.advanceBlockTo(startBlock + 10);
+
+    await farm.connect(deployer).forceEnd();
+    let oldBobPendingReward = parseInt(await farm.pendingReward(bob.address));
+
+    await time.advanceBlockTo(startBlock + 20);
+
+    let newBobPendingReward = parseInt(await farm.pendingReward(bob.address));
+    expect(newBobPendingReward).to.be.equal(oldBobPendingReward);
   });
 });
