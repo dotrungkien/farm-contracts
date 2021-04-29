@@ -5,16 +5,16 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./Farm.sol";
-import "./TransferHelper.sol";
 import "./interfaces/IERCBurn.sol";
 import "./interfaces/IFarmFactory.sol";
 import "./interfaces/IUniswapV2Factory.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 
 contract FarmGenerator is Ownable {
+    using SafeERC20 for IERC20;
     IFarmFactory public factory;
     IUniswapV2Factory public uniswapFactory;
 
@@ -50,12 +50,7 @@ contract FarmGenerator is Ownable {
 
         Farm newFarm = new Farm(address(factory), address(this));
 
-        TransferHelper.safeTransferFrom(
-            address(_rewardToken),
-            address(msg.sender),
-            address(newFarm),
-            _amount
-        );
+        _rewardToken.safeTransferFrom(address(msg.sender), address(newFarm), _amount);
 
         newFarm.init(
             _rewardToken,
