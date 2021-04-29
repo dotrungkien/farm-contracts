@@ -146,7 +146,7 @@ contract Farm {
         UserInfo storage user = userInfo[_user];
         uint256 _accRewardPerShare = accRewardPerShare;
         uint256 _lpSupply = lpToken.balanceOf(address(this));
-        if (block.number > lastRewardBlock && _lpSupply != 0) {
+        if (block.number > lastRewardBlock && _lpSupply != 0 && isActive == true) {
             uint256 _multiplier = getMultiplier(lastRewardBlock, block.number);
             uint256 _tokenReward = (_multiplier * rewardPerBlock) / 1e12;
             _accRewardPerShare = _accRewardPerShare + ((_tokenReward * 1e12) / _lpSupply);

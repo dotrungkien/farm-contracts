@@ -207,7 +207,7 @@ describe('Test Farming', async () => {
     await uniPair.connect(bob).approve(farm.address, '2000000000000000000');
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
-    await time.advanceBlockTo(startBlock + 199);
+    await time.advanceBlockTo(startBlock + 200);
 
     let bobPendingReward = parseInt(await farm.pendingReward(bob.address));
     console.log(bobPendingReward);
