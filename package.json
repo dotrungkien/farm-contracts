@@ -14,7 +14,6 @@
   "scripts": {
     "compile": "npx hardhat compile",
     "test": "npx hardhat test",
-    "deploy-rinkeby": "npx hardhat run scripts/deploy-testnet.js --network rinkeby",
-    "deploy-ropsten": "npx hardhat run scripts/deploy-testnet.js --network ropsten"
+    "deploy-bsctestnet": "npx hardhat run scripts/deploy-testnet.js --network bsctestnet"
   }
 }

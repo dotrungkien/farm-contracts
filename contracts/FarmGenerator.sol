@@ -10,17 +10,17 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./Farm.sol";
 import "./interfaces/IERCBurn.sol";
 import "./interfaces/IFarmFactory.sol";
-import "./interfaces/IUniswapV2Factory.sol";
-import "./interfaces/IUniswapV2Pair.sol";
+import "./interfaces/IPancakeFactory.sol";
+import "./interfaces/IPancakePair.sol";
 
 contract FarmGenerator is Ownable {
     using SafeERC20 for IERC20;
     IFarmFactory public factory;
-    IUniswapV2Factory public uniswapFactory;
+    IPancakeFactory public uniswapFactory;
 
     address payable private _devaddr;
 
-    constructor(IFarmFactory _factory, IUniswapV2Factory _uniswapFactory) {
+    constructor(IFarmFactory _factory, IPancakeFactory _uniswapFactory) {
         factory = _factory;
         _devaddr = payable(msg.sender);
         uniswapFactory = _uniswapFactory;
@@ -45,7 +45,7 @@ contract FarmGenerator is Ownable {
     ) public onlyOwner returns (address) {
         require(_rateParameters.length == 4, "Farm Generator: Invalid vesting parameters");
         require(_vestingParameters.length == 2, "Farm Generator: Invalid vesting parameters");
-        IUniswapV2Pair lpair = IUniswapV2Pair(address(_lpToken));
+        IPancakePair lpair = IPancakePair(address(_lpToken));
         address factoryPairAddress = uniswapFactory.getPair(lpair.token0(), lpair.token1());
         require(factoryPairAddress == address(_lpToken), "This pair is not on uniswap");
 
