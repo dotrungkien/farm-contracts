@@ -16,14 +16,14 @@ import "./interfaces/IPancakePair.sol";
 contract FarmGenerator is Ownable {
     using SafeERC20 for IERC20;
     IFarmFactory public factory;
-    IPancakeFactory public uniswapFactory;
+    IPancakeFactory public pancakeFactory;
 
     address payable private _devaddr;
 
-    constructor(IFarmFactory _factory, IPancakeFactory _uniswapFactory) {
+    constructor(IFarmFactory _factory, IPancakeFactory _pancakeFactory) {
         factory = _factory;
         _devaddr = payable(msg.sender);
-        uniswapFactory = _uniswapFactory;
+        pancakeFactory = _pancakeFactory;
     }
 
     function setDev(address payable devaddr_) public onlyOwner {
@@ -46,8 +46,8 @@ contract FarmGenerator is Ownable {
         require(_rateParameters.length == 4, "Farm Generator: Invalid vesting parameters");
         require(_vestingParameters.length == 2, "Farm Generator: Invalid vesting parameters");
         IPancakePair lpair = IPancakePair(address(_lpToken));
-        address factoryPairAddress = uniswapFactory.getPair(lpair.token0(), lpair.token1());
-        require(factoryPairAddress == address(_lpToken), "This pair is not on uniswap");
+        address factoryPairAddress = pancakeFactory.getPair(lpair.token0(), lpair.token1());
+        require(factoryPairAddress == address(_lpToken), "This pair is not on pancake");
 
         Farm newFarm = new Farm(address(factory), address(this));
 

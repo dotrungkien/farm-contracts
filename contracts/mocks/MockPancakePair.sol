@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract MockUniV2Pair is ERC20, Ownable {
+contract MockPancakePair is ERC20, Ownable {
     address public token0;
     address public token1;
 

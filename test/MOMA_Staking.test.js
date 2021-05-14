@@ -3,7 +3,7 @@ const { expect } = require('chai');
 const { time, expectRevert } = require('@openzeppelin/test-helpers');
 
 describe('Test Farming', async () => {
-  let farmFactory, farmGenerator, farm, uniPair, uniFactory, moma, weth, vesting;
+  let farmFactory, farmGenerator, farm, pancakePair, pancakeFactory, moma, weth, vesting;
   let deployer, alice, bob, jack;
   let startBlock;
 
@@ -30,17 +30,17 @@ describe('Test Farming', async () => {
     let WETH9 = await ethers.getContractFactory('WETH9');
     weth = await WETH9.connect(deployer).deploy();
 
-    let MockUniV2Pair = await ethers.getContractFactory('MockUniV2Pair');
-    uniPair = await MockUniV2Pair.connect(deployer).deploy(
+    let MockPancakePair = await ethers.getContractFactory('MockPancakePair');
+    pancakePair = await MockPancakePair.connect(deployer).deploy(
       'MOMA-WETH LP',
       'MOMA-WETH',
       moma.address,
       weth.address
     );
 
-    let MockUniV2Factory = await ethers.getContractFactory('MockUniV2Factory');
-    uniFactory = await MockUniV2Factory.connect(deployer).deploy();
-    await uniFactory.connect(deployer).setPair(moma.address, weth.address, uniPair.address);
+    let MockPancakeFactory = await ethers.getContractFactory('MockPancakeFactory');
+    pancakeFactory = await MockPancakeFactory.connect(deployer).deploy();
+    await pancakeFactory.connect(deployer).setPair(moma.address, weth.address, pancakePair.address);
 
     let FarmFactory = await ethers.getContractFactory('FarmFactory');
     farmFactory = await FarmFactory.connect(deployer).deploy();
@@ -48,7 +48,7 @@ describe('Test Farming', async () => {
     let FarmGenerator = await ethers.getContractFactory('FarmGenerator');
     farmGenerator = await FarmGenerator.connect(deployer).deploy(
       farmFactory.address,
-      uniFactory.address
+      pancakeFactory.address
     );
 
     await farmFactory.connect(deployer).adminAllowFarmGenerator(farmGenerator.address, true);
@@ -60,7 +60,7 @@ describe('Test Farming', async () => {
     await farmGenerator.connect(deployer).createFarm(
       moma.address,
       amountToFarm, // 2000 MOMA
-      uniPair.address,
+      pancakePair.address,
       rewardPerBlock, // 2 MOMA / block
       startBlock,
       deployer.address,
@@ -73,7 +73,7 @@ describe('Test Farming', async () => {
   });
 
   it('All setup successfully', async () => {
-    expect(await farm.lpToken()).to.be.equal(uniPair.address);
+    expect(await farm.lpToken()).to.be.equal(pancakePair.address);
     expect(await farm.rewardToken()).to.be.equal(moma.address);
     expect(parseInt(await farm.startBlock())).to.be.equal(startBlock);
     expect(parseInt(await farm.rewardPerBlock())).to.be.equal(parseInt(rewardPerBlock));
@@ -129,8 +129,8 @@ describe('Test Farming', async () => {
         parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle * 2 + 1000))
       ).to.be.equal(
         firstCycleRate * 1e12 * reducingCycle +
-          initRate * 1e12 * reducingCycle +
-          ((1e12 * initRate * reducingRate) / 100) * 1000
+        initRate * 1e12 * reducingCycle +
+        ((1e12 * initRate * reducingRate) / 100) * 1000
       );
     });
 
@@ -144,14 +144,14 @@ describe('Test Farming', async () => {
         )
       ).to.be.equal(
         parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle * 2 + 1000)) -
-          parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle + 1))
+        parseInt(await farm.getMultiplier(startBlock, startBlock + reducingCycle + 1))
       );
     });
   });
 
   it('Bob deposit successfully first and only bob in pool', async () => {
-    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
-    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+    await pancakePair.connect(bob).approve(farm.address, bobLPBeforeBalance);
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await time.advanceBlockTo(startBlock + 10);
 
@@ -161,11 +161,11 @@ describe('Test Farming', async () => {
   });
 
   it('Bob and Jack deposit successfully before startBlock comes', async () => {
-    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
-    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+    await pancakePair.connect(bob).approve(farm.address, bobLPBeforeBalance);
 
-    await uniPair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
-    await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
+    await pancakePair.connect(jack).approve(farm.address, jackLPBeforeBalance);
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await farm.connect(jack).deposit(jackLPBeforeBalance);
@@ -177,11 +177,11 @@ describe('Test Farming', async () => {
   });
 
   it('Bob and Jack deposit successfully first before startBlock comes', async () => {
-    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
-    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+    await pancakePair.connect(bob).approve(farm.address, bobLPBeforeBalance);
 
-    await uniPair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
-    await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
+    await pancakePair.connect(jack).approve(farm.address, jackLPBeforeBalance);
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await farm.connect(jack).deposit(jackLPBeforeBalance);
@@ -197,11 +197,11 @@ describe('Test Farming', async () => {
   });
 
   it('Bob deposit successfully before startBlock comes, Jack deposit successfully at startBlock + 10', async () => {
-    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
-    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+    await pancakePair.connect(bob).approve(farm.address, bobLPBeforeBalance);
 
-    await uniPair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
-    await uniPair.connect(jack).approve(farm.address, jackLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(jack.address, jackLPBeforeBalance);
+    await pancakePair.connect(jack).approve(farm.address, jackLPBeforeBalance);
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await time.advanceBlockTo(startBlock + 10);
@@ -222,10 +222,10 @@ describe('Test Farming', async () => {
   });
 
   it('Bob deposits first time successfully, second time', async () => {
-    await uniPair
+    await pancakePair
       .connect(deployer)
       .mint(bob.address, (2 * parseInt(bobLPBeforeBalance)).toString());
-    await uniPair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+    await pancakePair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await time.advanceBlockTo(startBlock + 10);
@@ -242,10 +242,10 @@ describe('Test Farming', async () => {
   });
 
   it('Bob deposits successfully, when he deposit seconde time, moma in Farm less than his pendingReward', async () => {
-    await uniPair
+    await pancakePair
       .connect(deployer)
       .mint(bob.address, (2 * parseInt(bobLPBeforeBalance)).toString());
-    await uniPair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+    await pancakePair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await time.advanceBlockTo(startBlock + 10);
@@ -271,10 +271,10 @@ describe('Test Farming', async () => {
   });
 
   it('Bob deposits successfully, when he withdraw, moma in Farm less than his pendingReward', async () => {
-    await uniPair
+    await pancakePair
       .connect(deployer)
       .mint(bob.address, (2 * parseInt(bobLPBeforeBalance)).toString());
-    await uniPair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
+    await pancakePair.connect(bob).approve(farm.address, (2 * parseInt(bobLPBeforeBalance)).toString());
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await time.advanceBlockTo(startBlock + 10);
@@ -319,16 +319,16 @@ describe('Test Farming', async () => {
 
     expect(newMultiplier).to.be.equal(
       firstCycleRate * 1e12 * reducingCycle +
-        initRate * 1e12 * reducingCycle +
-        ((1e12 * initRate * newReducingRate) / 100) * 1000
+      initRate * 1e12 * reducingCycle +
+      ((1e12 * initRate * newReducingRate) / 100) * 1000
     );
 
     expect(newMultiplier).to.be.lt(oldMultiplier);
   });
 
   it('Force end successfully', async () => {
-    await uniPair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
-    await uniPair.connect(bob).approve(farm.address, bobLPBeforeBalance);
+    await pancakePair.connect(deployer).mint(bob.address, bobLPBeforeBalance);
+    await pancakePair.connect(bob).approve(farm.address, bobLPBeforeBalance);
 
     await farm.connect(bob).deposit(bobLPBeforeBalance);
     await time.advanceBlockTo(startBlock + 10);

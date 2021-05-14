@@ -10,10 +10,22 @@ import "./Vesting.sol";
 contract Farm {
     using SafeERC20 for IERC20;
 
+    struct WithdrawInfo {
+        uint256 amount;
+        uint256 blockNumber;
+    }
+
+    struct DepositInfo {
+        uint256 amount;
+        uint256 blockNumber;
+    }
+
     /// @notice information stuct on each user than stakes LP tokens.
     struct UserInfo {
         uint256 amount; // How many LP tokens the user has provided.
         uint256 rewardDebt; // Reward debt.
+        WithdrawInfo[] withdraws;
+        DepositInfo[] deposits;
     }
 
     address public owner;
@@ -198,10 +210,17 @@ contract Farm {
 
             rewardToken.safeTransfer(msg.sender, _pending - _forVesting);
         }
-        if (user.amount == 0 && _amount > 0) {
-            factory.userEnteredFarm(msg.sender);
-            farmerCount++;
+
+        if(_amount > 0) {
+            if(user.amount == 0) {
+                factory.userEnteredFarm(msg.sender);
+                farmerCount++;
+            }
+
+            user.deposits.push(DepositInfo(_amount, block.number));
+
         }
+
         lpToken.safeTransferFrom(msg.sender, address(this), _amount);
         user.amount = user.amount + _amount;
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
@@ -220,9 +239,13 @@ contract Farm {
             updatePool();
         }
 
-        if (user.amount == _amount && _amount > 0) {
-            factory.userLeftFarm(msg.sender);
-            farmerCount--;
+        if ( _amount > 0) {
+            if(user.amount == _amount) {
+                factory.userLeftFarm(msg.sender);
+                farmerCount--;
+            }
+
+            user.withdraws.push(WithdrawInfo(_amount, block.number));
         }
 
         uint256 _pending = ((user.amount * accRewardPerShare) / 1e12) - user.rewardDebt;
